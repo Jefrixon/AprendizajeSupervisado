@@ -9,7 +9,9 @@ install = function(pkg){
   }
 }
 
-install("jsonlite")
+# install("jsonlite")
+# install.packages('jsonlite')
+library('jsonlite')
 
 fetch_data = function(preamble, list){
   data = preamble
@@ -43,5 +45,5 @@ get_data = function(api_url){
 
 # To Complete
 parse_data = function(json){
-  
+  return(as.data.frame(json["rows"]$rows$elements))
 }
