@@ -1,0 +1,528 @@
+---
+title: "Escogiendo un Hogar"
+author: "Jefferson Santiago"
+output: html_document
+---
+
+# Instalación y declaración de paquetes utilizados
+```{r, message=F, warning=F}
+#install.packages('curl')
+#install.packages('xlsx')
+library('curl')
+library('xlsx')
+```
+# Leemos el archivo hogares.xlsx
+```{r, message=F, warning=F}
+hogar_datos <- read.xlsx2("hogares.xlsx", sheetIndex = 1, startRow = 1, endRow = 104, header = T, 
+                          encoding = 'UTF-8')
+```
+# Eliminamos las columnas Piso y Foto ya que son irrelevantes.
+```{r, message=F, warning=F}
+hogar_datos$Piso <- NULL
+hogar_datos$Foto <- NULL
+```
+# Numerizamos la columna Tipo.de.Inmueble utilizando la función grepl para usar expresiones regulares.
+## Los valores serán cambiados de la siguiente manera:
+### 0 para Appartamento, 1 para Mini Appartamento o Monolocale.
+```{r, message=F, warning=F}
+hogar_datos$Tipo.de.Inmueble <- as.character(hogar_datos$Tipo.de.Inmueble)
+hogar_datos$Tipo.de.Inmueble[grepl("Mini", hogar_datos$Tipo.de.Inmueble)] <- '1'
+hogar_datos$Tipo.de.Inmueble[grepl("Ap", hogar_datos$Tipo.de.Inmueble)] <- '0'
+hogar_datos$Tipo.de.Inmueble[grepl("Monolocale", hogar_datos$Tipo.de.Inmueble)] <- '1'
+hogar_datos$Tipo.de.Inmueble <- as.numeric(hogar_datos$Tipo.de.Inmueble)
+```
+# Siguiente paso, se crearán columnas para cada variable almacenada en Descrición (Solo las que se describen en el enunciado),
+### variables como: bagni, si tiene ingreso, camera, cucina, riscaldamento, condominio.
+```{r, message=F, warning=F}
+hogar_datos$Descripción <- as.character(hogar_datos$Descripción)
+```
+## Creamos la coluumna de ingreso para numerizar si tiene ingreso o no, con 1 y 0 respectivamente.
+```{r, message=F, warning=F}
+hogar_datos$ingreso <- '0'
+hogar_datos$ingreso[grepl("Ingresso", hogar_datos$Descripción)] <- '1'
+```
+## Creamos la coluumna de habitacion para numerizar la cantidad de camere.
+```{r, message=F, warning=F}
+hogar_datos$nroHabitaciones <- '0'
+hogar_datos$nroHabitaciones[grepl("camera", hogar_datos$Descripción)] <- '1'
+hogar_datos$nroHabitaciones[grepl("2.camer|2.camer|2camer|2camer", hogar_datos$Descripción)] <- '2'
+hogar_datos$nroHabitaciones[grepl("3.camer|3.camer|3camer|3camer| tre.camer", hogar_datos$Descripción)] <- '3'
+hogar_datos$nroHabitaciones[grepl("4.camer|4.camer|4camer|4camer", hogar_datos$Descripción)] <- '4'
+hogar_datos$nroHabitaciones[grepl("5.camer|5.camer|5camer|5camer", hogar_datos$Descripción)] <- '5'
+```
+## Creamos la coluumna de cocina para numerizar si tiene o no coucine.
+```{r, message=F, warning=F}
+hogar_datos$cocina <- '0'
+hogar_datos$cocina[grepl("cina", hogar_datos$Descripción)] <- '1'
+```
+## Creamos la coluumna de baños para numerizar la cantidad de baños.
+```{r, message=F, warning=F}
+hogar_datos$nroBanos <- '0'
+hogar_datos$nroBanos[grepl("bagno", hogar_datos$Descripción)] <- '1'
+hogar_datos$nroBanos[grepl("2.bagn|2bagn", hogar_datos$Descripción)] <- '2'
+hogar_datos$nroBanos[grepl("3.bagn|3bagn", hogar_datos$Descripción)] <- '3'
+hogar_datos$nroBanos[grepl("4.bagn|4bagn", hogar_datos$Descripción)] <- '4'
+```
+## Creamos la coluumna de calefaccion para numerizar  riscaldamento.
+```{r, message=F, warning=F}
+hogar_datos$calefaccion <- '0'
+hogar_datos$calefaccion[grepl("riscaldamento|TUTTO", hogar_datos$Precio.Mensual)] <- '1'
+```
+## Creamos la coluumna de condominio para numerizar condominio.
+```{r, message=F, warning=F}
+hogar_datos$condominio <- '0'
+hogar_datos$condominio[grepl("condominio|TUTTO|conominio", hogar_datos$Precio.Mensual)] <- '1'
+```
+## Creamos la columna de genero. 0 para hombres, 1 para mujeres y 2 para ambos géneros.
+```{r, message=F, warning=F}
+hogar_datos$genero <- '-1'
+hogar_datos$genero[grepl("ragazzi", hogar_datos$Notas)] <-  '0'
+hogar_datos$genero[grepl("ragazze", hogar_datos$Notas)] <-  '1'
+hogar_datos$genero[grepl('ragazze/i|ragazzi/e|ragazzi/ragazze|ragazze/ragazzi', hogar_datos$Notas)] <-  '2'
+# si no especifican el genero, se asume que se aceptan ambos generos
+hogar_datos$genero[grepl('-1', hogar_datos$genero)] <-  '2'
+```
+## Creamos la columna de cargosPorServicio 0 para especificar que no incluye, 1 para especificar que si.
+```{r, message=F, warning=F}
+hogar_datos$cargosPorServicio <- '0'
+hogar_datos$cargosPorServicio[grepl("spese escluse|spese", hogar_datos$Precio.Mensual)] <-  '1'
+```
+## Creamos una columna para el precio y otra para el tipo de habitacion. 
+## 0 para habitación simple, 1 para habitación doble(tomo la habitación doble como posto letto),
+## 1 para posto letto y 2 para intero Appartamento
+## La información en el siguiente paso corresponde a los que tienen solo un tipo de habitación disponible
+## con un precio en específico
+## El monolocale se tomó como simple y mini apartamento como apartamento.
+```{r, message=F, warning=F}
+hogar_datos$precio <- '-1'
+hogar_datos$tipoHabitacion <- '-1'
+hogar_datos$Habitaciones.Disponibles <- as.character(hogar_datos$Habitaciones.Disponibles)
+hogar_datos$Precio.Mensual <- as.character(hogar_datos$Precio.Mensual)
+for (row in 1:nrow(hogar_datos)){
+  precios_num <- strsplit(hogar_datos$Precio.Mensual[row], '\\D+')
+  precios_num <- unlist(precios_num)[2:length(unlist(precios_num))]
+  # print(precios_num)
+  if (length(precios_num) == 1){
+    hogar_datos$precio[row] <- as.numeric(precios_num[1])
+    if (grepl("ingol", hogar_datos$Habitaciones.Disponibles[row])) hogar_datos$tipoHabitacion[row] <- '0'
+    # Tome los las habitaciones "posto letto" y "doppia" como si fueran del mismo tipo ya que en todas las
+    # apariciones que sale doppia, en el precio mensual nombran que se refieren a un posto letto.
+    if (grepl("doppi", hogar_datos$Habitaciones.Disponibles[row])) hogar_datos$tipoHabitacion[row] <- '1'
+    if (grepl("posto", hogar_datos$Habitaciones.Disponibles[row])) hogar_datos$tipoHabitacion[row] <- '1'
+    if (grepl("parta", hogar_datos$Habitaciones.Disponibles[row])) hogar_datos$tipoHabitacion[row] <- '2'
+  }
+}
+```
+## Los registros restantes no procesados en el paso anterior, se procesarán a continuación:
+```{r, message=F, warning=F}
+hogar_datos$tipoHabitacion[90] <- '0'
+# Fila 4: 1 doppia e/o uso singola € 450; € 300 a posto letto...
+row <- hogar_datos[4,]
+row$tipoHabitacion <- '1'
+row$precio <- '450'
+hogar_datos$tipoHabitacion[4] <- '0'
+hogar_datos$precio[4] <- '300'
+hogar_datos <- rbind(hogar_datos, row)
+# Fila 5: 2 singole 2 singole € 450; € 450; € 55,00 per le spese
+row <-  hogar_datos[5,]
+row$tipoHabitacion <- '0'
+row$precio <- '450'
+hogar_datos$tipoHabitacion[5] <- '0'
+hogar_datos$precio[5] <- '450'
+hogar_datos <- rbind(hogar_datos, row)
+# Fila 7: 2 1 doppia e/o uso singola € 450; € 250 a posto letto; spese escluse
+row <- hogar_datos[7,]
+row$tipoHabitacion <- '1'
+row$precio <- '450'
+hogar_datos$tipoHabitacion[7] <- '0'
+hogar_datos$precio[7] <- '250'
+hogar_datos <- rbind(hogar_datos, row)
+# Fila 10: 1 singola; 1 doppia; € 550 singola, € 350 posto letto TUTTO INCLUSO
+row <- hogar_datos[10,]
+row$tipoHabitacion <- '0'
+row$precio <- '550'
+hogar_datos$tipoHabitacion[10] <- '1'
+hogar_datos$precio[10] <- '350'
+hogar_datos <- rbind(hogar_datos, row)
+# Fila 16: 4 singole € 460; € 460; € 430; € 430; condominio e riscaldamento inclusi
+row <- hogar_datos[16,]
+row$tipoHabitacion <- '0'
+row$precio <- '460'
+hogar_datos <- rbind(hogar_datos, row)
+row$tipoHabitacion <- '0'
+row$precio <- '460'
+hogar_datos <- rbind(hogar_datos, row)
+row$tipoHabitacion <- '0'
+row$precio <- '430'
+hogar_datos <- rbind(hogar_datos, row)
+hogar_datos$tipoHabitacion[16] <- '0'
+hogar_datos$precio[16] <- '430'
+# Fila 18: 2 singole € 450; € 400; € 50/mese condominio e riscaldamento
+row <- hogar_datos[18,]
+row$tipoHabitacion <- '0'
+row$precio <- '450'
+hogar_datos <- rbind(hogar_datos, row)
+hogar_datos$tipoHabitacion[18] <- '0'
+hogar_datos$precio[18] <- '400'
+# Fila 21: 3 singole € 475; € 525; € 575; TUTTO INCLUSO
+row <- hogar_datos[21,]
+row$tipoHabitacion <- '0'
+row$precio <- '475'
+hogar_datos <- rbind(hogar_datos, row)
+row$precio <- '525'
+hogar_datos <- rbind(hogar_datos, row)
+hogar_datos$tipoHabitacion[21] <- '0'
+hogar_datos$precio[21] <- '575'
+# Fila 22: 2 singole € 525; € 575; TUTTO INCLUSO
+row <- hogar_datos[22,]
+row$tipoHabitacion <- '0'
+row$precio <- '525'
+hogar_datos <- rbind(hogar_datos, row)
+hogar_datos$tipoHabitacion[22] <- '0'
+hogar_datos$precio[22] <- '575'
+# Fila 23: 3 singole € 475; € 525; € 575; TUTTO INCLUSO
+row <- hogar_datos[23,]
+row$tipoHabitacion <- '0'
+row$precio <- '475'
+hogar_datos <- rbind(hogar_datos, row)
+row$precio <- '525'
+hogar_datos <- rbind(hogar_datos, row)
+hogar_datos$tipoHabitacion[23] <- '0'
+hogar_datos$precio[23] <- '575'
+# Fila 24: 3 singole € 380; €380; € 350; internet incluso
+row <- hogar_datos[24,]
+row$tipoHabitacion <- '0'
+row$precio <- '380'
+hogar_datos <- rbind(hogar_datos, row)
+row$precio <- '380'
+hogar_datos <- rbind(hogar_datos, row)
+hogar_datos$tipoHabitacion[24] <- '0'
+hogar_datos$precio[24] <- '350'
+# Fila 26: 3 singole € 400; € 420; € 380; condominio e acqua inclusi
+row <- hogar_datos[26,]
+row$tipoHabitacion <- '0'
+row$precio <- '400'
+hogar_datos <- rbind(hogar_datos, row)
+row$precio <- '420'
+hogar_datos <- rbind(hogar_datos, row)
+hogar_datos$tipoHabitacion[26] <- '0'
+hogar_datos$precio[26] <- '380'
+# Fila 31: 1 Singola / uso doppia € 450 singola; € 250 posto letto; condominio e riscaldamento inclusi
+row <- hogar_datos[31,]
+row$tipoHabitacion <- '0'
+row$precio <- '450'
+hogar_datos <- rbind(hogar_datos, row)
+hogar_datos$tipoHabitacion[31] <- '1'
+hogar_datos$precio[31] <- '250'
+# Fila 41: 2 singole € 350; € 450; condominio e acqua inclusi
+row <- hogar_datos[41,]
+row$tipoHabitacion <- '0'
+row$precio <- '350'
+hogar_datos <- rbind(hogar_datos, row)
+hogar_datos$tipoHabitacion[41] <- '0'
+hogar_datos$precio[41] <- '450'
+# Fila 42: 4 singole € 500; € 450; € 450; € 420 condominio, acqua, riscaldamento e tassa rifiuti inclusi..
+row <- hogar_datos[42,]
+row$tipoHabitacion <- '0'
+row$precio <- '500'
+hogar_datos <- rbind(hogar_datos, row)
+row$precio <- '450'
+hogar_datos <- rbind(hogar_datos, row)
+row$precio <- '450'
+hogar_datos <- rbind(hogar_datos, row)
+hogar_datos$tipoHabitacion[42] <- '0'
+hogar_datos$precio[42] <- '420'
+# Fila 43: 2 singole € 450; € 500; condominio, acqua e tassa rifiuti inclusi..
+row <- hogar_datos[43,]
+row$tipoHabitacion <- '0'
+row$precio <- '500'
+hogar_datos <- rbind(hogar_datos, row)
+hogar_datos$tipoHabitacion[43] <- '0'
+hogar_datos$precio[43] <- '450'
+# Fila 44: 3 singole con bagno privato € 400; € 370; € 340; spese escluse...
+row <- hogar_datos[44,]
+row$tipoHabitacion <- '0'
+row$precio <- '400'
+hogar_datos <- rbind(hogar_datos, row)
+row$precio <- '370'
+hogar_datos <- rbind(hogar_datos, row)
+hogar_datos$tipoHabitacion[44] <- '0'
+hogar_datos$precio[44] <- '340'
+# Fila 56: 3 singola € 550; € 500; € 450; condominio, acqua e riscaldamento
+row <- hogar_datos[56,]
+row$tipoHabitacion <- '0'
+row$precio <- '550'
+hogar_datos <- rbind(hogar_datos, row)
+row$precio <- '500'
+hogar_datos <- rbind(hogar_datos, row)
+hogar_datos$tipoHabitacion[56] <- '0'
+hogar_datos$precio[56] <- '450'
+# Fila 61: 3 singole €425; € 450; € 475; condominio, acqua e riscaldamento
+row <- hogar_datos[61,]
+row$tipoHabitacion <- '0'
+row$precio <- '425'
+hogar_datos <- rbind(hogar_datos, row)
+row$precio <- '450'
+hogar_datos <- rbind(hogar_datos, row)
+hogar_datos$tipoHabitacion[61] <- '0'
+hogar_datos$precio[61] <- '475'
+# Fila 72: 1 singola; 1 posto letto € 430 singola; € 350 posto letto; TUTTO INCLUSO
+row <- hogar_datos[72,]
+row$tipoHabitacion <- '0'
+row$precio <- '430'
+hogar_datos <- rbind(hogar_datos, row)
+hogar_datos$tipoHabitacion[72] <- '1'
+hogar_datos$precio[72] <- '350'
+# Fila 74: 1 Singole € 350; € 450; Spese escluse
+hogar_datos$tipoHabitacion[74] <- '0'
+hogar_datos$precio[74] <- '350'
+# Fila 76: 2 singole € 850 intero appartamento; € 425 singola; conominio, acqua e riscaldamento inclusi..
+row <- hogar_datos[76,]
+row$tipoHabitacion <- '0'
+row$precio <- '850'
+hogar_datos <- rbind(hogar_datos, row)
+hogar_datos$tipoHabitacion[76] <- '0'
+hogar_datos$precio[76] <- '425'
+# Fila 77: 1 singola/uso doppia € 550; € 350 posto letto; condominio, acqua, riscaldamento e tassa rifiuti inclusi
+row <- hogar_datos[77,]
+row$tipoHabitacion <- '0'
+row$precio <- '550'
+hogar_datos <- rbind(hogar_datos, row)
+hogar_datos$tipoHabitacion[77] <- '1'
+hogar_datos$precio[77] <- '350'
+# Fila 81: 1 singola/uso doppia;€ 550 singola; € 325 posto letto; TUTTO INCLUSO
+row <- hogar_datos[81,]
+row$tipoHabitacion <- '0'
+row$precio <- '550'
+hogar_datos <- rbind(hogar_datos, row)
+hogar_datos$tipoHabitacion[81] <- '1'
+hogar_datos$precio[81] <- '325'
+# Fila 84: 2 singole; 1 doppia € 475; € 525; € 375 posto letto; condominio, acqua, riscaldamento tassa rifiuti inclusa
+row <- hogar_datos[84,]
+row$tipoHabitacion <- '0'
+row$precio <- '475'
+hogar_datos <- rbind(hogar_datos, row)
+row$precio <- '525'
+hogar_datos <- rbind(hogar_datos, row)
+hogar_datos$tipoHabitacion[84] <- '1'
+hogar_datos$precio[84] <- '375'
+# Fila 85: 1 singola; 1 doppia € 450 singola; € 300 posto letto; spese escluse
+row <- hogar_datos[85,]
+row$tipoHabitacion <- '0'
+row$precio <- '450'
+hogar_datos <- rbind(hogar_datos, row)
+hogar_datos$tipoHabitacion[85] <- '1'
+hogar_datos$precio[85] <- '300'
+# Fila 87: 2 singole € 475 € 450; condominio, acqua, riscaldamento, tassa rifiuti, internet inclusi
+row <- hogar_datos[87,]
+row$tipoHabitacion <- '0'
+row$precio <- '475'
+hogar_datos <- rbind(hogar_datos, row)
+hogar_datos$tipoHabitacion[87] <- '0'
+hogar_datos$precio[87] <- '450'
+# Fila 88: 1 singola; 1 doppia € 450; € 300 posto letto; condominio, acqua, riscaldamento, tassa rifiuti inclusi
+row <- hogar_datos[88,]
+row$tipoHabitacion <- '0'
+row$precio <- '450'
+hogar_datos <- rbind(hogar_datos, row)
+hogar_datos$tipoHabitacion[88] <- '1'
+hogar_datos$precio[88] <- '300'
+# Fila 93: 2 singole € 500; € 600; TUTTO INCLUSO
+row <- hogar_datos[93,]
+row$tipoHabitacion <- '0'
+row$precio <- '500'
+hogar_datos <- rbind(hogar_datos, row)
+hogar_datos$tipoHabitacion[93] <- '0'
+hogar_datos$precio[93] <- '600'
+# Fila 99: 2 singole € 600; € 550; spese escluse
+row <- hogar_datos[99,]
+row$tipoHabitacion <- '0'
+row$precio <- '550'
+hogar_datos <- rbind(hogar_datos, row)
+hogar_datos$tipoHabitacion[99] <- '0'
+hogar_datos$precio[99] <- '600'
+```
+# Cargamos el archivo para utilizar el api de google e inicializamos el valor de la api_key
+```{r, message=F, warning=F}
+source('google_api.R')
+api_key = 'AIzaSyDu45StBRnSVvZc7znYibb7ywxkYar_974'
+```
+# Me aseguro que sean caracteres Dirección y distrito, inicializo toda las duraciones en 0 y luego inicializo el lugar_destino con la direccion en google maps de Sapienza Universidad de Roma
+```{r, message=F, warning=F}
+hogar_datos$Dirección <- as.character(hogar_datos$Dirección)
+hogar_datos$Distrito <- as.character(hogar_datos$Distrito)
+hogar_datos$duracion <- '0'
+lugar_destino = 'Piazzale Aldo Moro, 5,00185 Roma,Italia' # Direccion en google maps de Sapienza Universidad de Roma
+```
+## Realizo un for para obtener las distancias de todos los lugares de origen al lugar destino
+```{r, message=F, warning=F}
+for (row in 1:nrow(hogar_datos)){
+  # Algunos valores tienen saltos de linea
+  hogar_datos$Dirección[row] <- gsub("\n", " ", hogar_datos$Dirección[row])
+  hogar_datos$Distrito[row] <- gsub("\n", " ", hogar_datos$Distrito[row])
+  lugar_origen <- paste(c(hogar_datos$Dirección[row]," ",hogar_datos$Distrito[row]), collapse="") 
+  api_url <- get_url(lugar_origen, lugar_destino, api_key)
+  data <- get_data(api_url)
+  eryeison = parse_data(data)
+  if(eryeison$status == "OK"){
+    hogar_datos$duracion[row] <- eryeison$duration$value
+    hogar_datos$lugar_origen[row] <- lugar_origen
+  }else{
+    lugar_origen <- hogar_datos$Dirección[row]
+    api_url <- get_url(lugar_origen, lugar_destino, api_key)
+    data <- get_data(api_url)
+    eryeison = parse_data(data)
+    if(eryeison$status == "OK"){
+      hogar_datos$duracion[row] = eryeison$duration$value
+      hogar_datos$lugar_origen[row] <- lugar_origen
+    }
+  }
+}
+```
+# Eliminamos columnas del dataset que ya no se usarán
+```{r, message=F, warning=F}
+hogar_datos$Notas <- NULL
+hogar_datos$Descripción <- NULL
+hogar_datos$Habitaciones.Disponibles <- NULL
+hogar_datos$Precio.Mensual <- NULL
+hogar_datos$Distrito <- NULL
+hogar_datos$Dirección <- NULL
+# Quito la columna encode que se genera.
+hogar_datos$encoding <- NULL
+```
+# Separamos la data con respecto al genero que se acepte en el hogar. para realizar las predicciones por separado
+```{r, message=F, warning=F}
+hogar_datos_hombres <- hogar_datos[hogar_datos$genero == '0' | hogar_datos$genero == '2',]
+hogar_datos_mujeres <- hogar_datos[hogar_datos$genero == '1' | hogar_datos$genero == '2',]
+```
+# Una vez realizado el preprocesamiento, procedemos a realizar una regresión lineal
+## Regresion Lineal General
+```{r, message=F, warning=F}
+regresionGeneral <- lm(precio ~ ., data = hogar_datos)
+desviacion <- summary(regresionGeneral)$sigma
+# Desviación generada por realizar la regreción lineal con todos los datos
+desviacion
+```
+# Utilizando la data de los Hombres
+## Realizaremos una regresion simple con cada columna del dataset y buscaremos el que tenga menos desviación
+## utilizando el sigma resultante de la funcion summary()
+```{r, message=F, warning=F}
+desviacion <- 999
+for (i in 1:12) {
+  if (i!=10) {
+    regresionHombres <- lm(hogar_datos_hombres$precio ~ hogar_datos_hombres[,i])
+    if (summary(regresionHombres)$sigma < desviacion) {
+      desviacion <- summary(regresionHombres)$sigma
+      regresionHombresOptima <- regresionHombres
+    }
+  }
+}
+```
+## Al realizar la regresión con cada una de las columnas, la que tiene menos 
+## desviación es TipoHabitacion. Esta es la desviación y la gráfica generada.
+```{r, message=F, warning=F}
+desviacion
+plot(hogar_datos_hombres$tipoHabitacion,hogar_datos_hombres$precio)
+abline(regresionHombres)
+```
+## Sin embargo, la regresión lineal multiple genera menos desviación
+```{r, message=F, warning=F}
+regresionMultipleHombre <- lm(precio ~ ., data = hogar_datos_hombres)
+desviacion <- summary(regresionMultipleHombre)$sigma
+desviacion
+```
+# Estas son las gráficas que genera
+```{r, message=F, warning=F}
+plot(regresionMultipleHombre)
+```
+# Predicción de un precio para Hombre con Regresion lineal Multiple
+```{r, message=F, warning=F}
+aux <- hogar_datos[1,]
+aux$Tipo.de.Inmueble <- 0 # Apartamento
+aux$ingreso <- '1' # Con entrada
+aux$nroHabitaciones <- '2' # 2 habitaciones
+aux$cocina <- '1' # Con cocina
+aux$nroBanos <- '1' # Cantidad de baños 
+aux$calefaccion <- '0' # 1 para calefaccion
+aux$condominio <- '0' # 1 para pagar condominio
+aux$genero<- '0' # ambos generos
+aux$cargosPorServicio <- '1' # 1 incluye cargos por servicios
+aux$tipoHabitacion <- '2' # Apartamento completo
+aux$lugar_origen <- 'Gallia San Giovanni' # Direccion o zona donde quieres
+```
+# Consulta de distancia usando el api de google
+```{r, message=F, warning=F}
+api_url <- get_url(aux$lugar_origen, lugar_destino, api_key)
+data <- get_data(api_url)
+eryeison = parse_data(data)
+if(eryeison$status == "OK"){
+  duracion <- eryeison$duration$value
+}
+if (eryeison$status != "OK") {
+  duracion <- '0'
+}
+aux$duracion <- as.factor(duracion)
+```
+# Predecimos el costo del hogar según la regresion multiple hecha en los pasos anteriores
+```{r, message=F, warning=F}
+prediccion <- predict(regresionMultipleHombre, newdata = aux)
+prediccion
+```
+## Utilizamos la data de las Mujeres
+## Realizaremos una regresion simple con cada columna del dataset y buscaremos el que tenga menos desviación
+## utilizando el sigma resultante de la funcion summary()
+```{r, message=F, warning=F}
+desviacion <- 999
+for (i in 1:12) {
+  if (i!=10) {
+    regresionMujeres <- lm(hogar_datos_mujeres$precio ~ hogar_datos_mujeres[,i])
+    if (summary(regresionMujeres)$sigma < desviacion) {
+      desviacion <- summary(regresionMujeres)$sigma
+      regresionMujeresOptima <- regresionMujeres
+    }
+  }
+}
+```
+## Al realizar la regresión con cada una de las columnas, la que tiene menos 
+## desviación es TipoHabitacion. Esta es la desviación y la gráfica generada.
+```{r, message=F, warning=F}
+desviacion
+plot(hogar_datos_mujeres$tipoHabitacion,hogar_datos_mujeres$precio)
+abline(regresionMujeresOptima)
+```
+# Sin embargo, la regresión lineal multiple genera menos desviación
+```{r, message=F, warning=F}
+regresionMultipleMujer <- lm(precio ~ ., data = hogar_datos_mujeres)
+desviacion <- summary(regresionMultipleMujer)$sigma
+desviacion
+```
+# Estas son las gráficas que genera
+```{r, message=F, warning=F}
+plot(regresionMultipleMujer)
+```
+
+# Predicción de un precio para Mujer con Regresion lineal Multiple
+# con los mismos datos, solo cambiando el género
+```{r, message=F, warning=F}
+aux <- hogar_datos[1,]
+aux$Tipo.de.Inmueble <- 0 # Apartamento
+aux$ingreso <- '1' # Con entrada
+aux$nroHabitaciones <- '2' # 2 habitaciones
+aux$cocina <- '1' # Con cocina
+aux$nroBanos <- '1' # Cantidad de baños 
+aux$calefaccion <- '0' # 1 para calefaccion
+aux$condominio <- '0' # 1 para pagar condominio
+aux$genero<- '1' # ambos generos
+aux$cargosPorServicio <- '1' # 1 incluye cargos por servicios
+aux$tipoHabitacion <- '2' # Apartamento completo
+aux$lugar_origen <- 'Gallia San Giovanni' # Direccion o zona donde quieres
+```
+# La duración seria la misma del mismo lugar de origen
+```{r, message=F, warning=F}
+aux$duracion <- as.factor(duracion)
+```
+# Predecimos el costo del hogar según la regrecion multiple hecha en los pasos anteriores
+```{r, message=F, warning=F}
+prediccion <- predict(regresionMultipleMujer, newdata = aux)
+prediccion
+```
